@@ -31,9 +31,9 @@ two shared libraries export a dynamic symbol with the same name, each of them
 will get its own copy of the symbol rather than both names be resolved to the 
 same symbol as with `RTLD_GLOBAL`.  This local resolution is often used when 
 loading shared libraries in plugin infrastructures since it provides a basic 
-isolation between the libraries.  There is one problem with `RTLD_LOCAL` though in 
-terms of exception handling and dynamic_cast.  When compiler generates code for 
-constructs like
+isolation between the libraries.  There is one problem with `RTLD_LOCAL` though 
+in terms of exception handling and `dynamic_cast`.  When compiler generates code 
+for constructs like
 
 ```
   try {
@@ -74,26 +74,27 @@ downcast the types):
 ```
 
 It is important here how `std::type_info` objects (returned by `typeid()`) are 
-checked for equality.  The default behavior on systems with weak linker symbols 
-enabled and pre-4.5 version of GCC is to check `type_info` objects for equality by comparing 
-their pointers.  This assumes that the dynamic linker is going to bind all 
-references to a given `std::type_info` object to the same instance.  This is a 
-reasonable expectation in case of automatic loading of shared libraries or with 
-explicit loading using `dlopen()` with `RTLD_GLOBAL` flag.  But not with `RTLD_LOCAL` 
-since, as we saw, this flag will make each shared library loaded in such way 
-have its own copy of the `std::type_info` object for each type.  This is the 
-reason why in the test example the exception is not caught - it simply fall 
-through since the pointers are different.
+checked for equality, i.e. how `bool operator==(const std::type_info& lhs, const 
+std::type_info& rhs)` is implemented.  The default behavior on systems with weak 
+linker symbols enabled and pre-4.5 version of GCC is to check `type_info` 
+objects for equality by comparing their pointers.  This assumes that the dynamic 
+linker is going to bind all references to a given `std::type_info` object to the 
+same instance.  This is a reasonable expectation in case of automatic loading of 
+shared libraries or with explicit loading using `dlopen()` with `RTLD_GLOBAL` 
+flag.  But not with `RTLD_LOCAL` since, as we saw, this flag will make each 
+shared library loaded in such way have its own copy of the `std::type_info` 
+object for each type.  This is the reason why in the test example the exception 
+is not caught - it simply fall through since the pointers are different.
 
 This behavior existed for long time, but with GCC 4.5 and newer the default has 
-changed to check `std::type_info` objects for equality using their names rather 
-than pointers.  Actually, this mode is available in the older GCC versions as 
-well, but to enable it you need to recompile GCC with 
-`__GXX_MERGED_TYPEINFO_NAMES` define set to 1.  Also, some Linux distributions 
-seem to have backported the GCC 4.5. change in the default behavior to the 
-earlier versions of GCC that they actually use.  For example, RHEL6 that uses 
-GCC 4.4.6 has the change and uses the name-based equality check for 
-`std::type_info`.
+[changed](https://tahoe-lafs.org/pipermail/tahoe-dev/2010-March/004084.html) to 
+check `std::type_info` objects for equality using their names rather than 
+pointers.  Actually, this mode is available in the older GCC versions as well, 
+but to enable it you need to recompile GCC with `__GXX_MERGED_TYPEINFO_NAMES` 
+define set to 1.  Also, some Linux distributions seem to have backported the GCC 
+4.5.  change in the default behavior to the earlier versions of GCC that they 
+actually use.  For example, RHEL6 that uses GCC 4.4.6 has the change and uses 
+the name-based equality check for `std::type_info`.
 
 To conclude, catching a C++ exception thrown in another shared library or making 
 a `dynamic_cast` for an object created in another shared library can be tricky in 
